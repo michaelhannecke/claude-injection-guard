@@ -1,0 +1,59 @@
+# Claude Code Injection Guard — Configuration
+# Copy this file to one of:
+#   ~/.claude/injection-guard/config.yml   (recommended, user-wide)
+#   ./injection-guard.config.yml           (project-local)
+# Or set env var: INJECTION_GUARD_CONFIG=/path/to/config.yml
+
+stage1:
+  # Add your own regex patterns here
+  custom_patterns: []
+  # Example:
+  # custom_patterns:
+  #   - pattern: "(?i)exfiltrate.*data"
+  #     reason: "Custom: data exfiltration language"
+  #     score: 0.8
+  #     definitive: false
+
+stage2:
+  # Enable/disable LLM-based Stage 2 scanning
+  enabled: true
+
+  # Backend selection:
+  #   ollama            → local Ollama install (default)
+  #   openai_compatible → LM Studio, vLLM, Docker Model Runner (OpenAI API)
+  #   docker_model_runner → Docker Desktop Model Runner
+  #   mlx               → Apple Silicon native via mlx-lm
+  backend: ollama
+
+  # Model to use for classification
+  model: phi3.5:mini
+  # Other good options:
+  #   qwen2.5:1.5b-instruct (very fast, good accuracy)
+  #   llama3.2:1b-instruct
+  #   mlx-community/Qwen2.5-1.5B-Instruct-4bit  (for mlx backend)
+
+  # API endpoint for ollama / openai_compatible
+  endpoint: http://localhost:11434
+
+  # Seconds before giving up on LLM call (fails open)
+  timeout_seconds: 10
+
+  # Minimum confidence to trigger a block (0.0–1.0)
+  confidence_threshold: 0.75
+
+logging:
+  # DEBUG | INFO | WARNING | ERROR
+  level: INFO
+
+  # Optional: write logs to file (in addition to stderr)
+  # file: ~/.claude/injection-guard/guard.log
+
+hooks:
+  # Tools to intercept
+  watched_tools:
+    - WebFetch
+    - web_fetch
+
+  # If true, pass content through on guard errors (recommended)
+  # If false, block on guard errors (more secure, may break workflows)
+  fail_open: true

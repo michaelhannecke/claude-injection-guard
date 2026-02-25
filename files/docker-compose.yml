@@ -1,0 +1,40 @@
+# Optional: Docker-based LLM guard backend
+# Only needed if you prefer not to install Ollama natively.
+# The hook script itself always runs on the host.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose exec guard-llm ollama pull phi3.5:mini
+#
+# Then set in config.yml:
+#   stage2:
+#     backend: ollama
+#     endpoint: http://localhost:11434
+
+services:
+  guard-llm:
+    image: ollama/ollama:latest
+    container_name: injection-guard-llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+    # Apple Silicon: Ollama auto-detects Metal
+    # Linux with NVIDIA: uncomment below
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  ollama_models:
+    name: injection-guard-ollama-models

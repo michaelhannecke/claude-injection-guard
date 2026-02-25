@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "claude-injection-guard"
+version = "0.1.0"
+description = "Prompt injection guard for Claude Code agents — hooks-based, two-stage detection with local LLM support"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+keywords = ["claude", "prompt-injection", "ai-security", "llm-security", "claude-code"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Security",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+mlx = ["mlx-lm>=0.19"]
+dev = ["pytest>=8.0", "pytest-cov", "ruff", "mypy"]
+
+[project.urls]
+Repository = "https://github.com/YOUR_USERNAME/claude-injection-guard"
+Issues = "https://github.com/YOUR_USERNAME/claude-injection-guard/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
