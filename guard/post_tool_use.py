@@ -6,20 +6,13 @@ for prompt injection attempts before they reach the agent context.
 """
 
 import json
-import sys
 import logging
-from pathlib import Path
-
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+import sys
 
 from guard.stage1_rules import Stage1RuleEngine, RuleResult
 from guard.stage2_llm import Stage2LLMGuard
 from guard.config import load_config
 from guard.logger import setup_logger
-
-# Tools to intercept
-WATCHED_TOOLS = {"WebFetch", "web_fetch", "Bash", "bash"}
 
 
 def build_block_response(reason: str, stage: str, details: str = "") -> dict:
@@ -46,17 +39,20 @@ def process_hook_input(raw_input: str, config: dict, logger: logging.Logger) -> 
     Reads hook JSON from stdin, evaluates content, writes result to stdout.
     Exit code 0 = passthrough, Exit code 1 = blocked (non-zero blocks in Claude Code).
     """
+    fail_open = config.get("hooks", {}).get("fail_open", True)
+
     try:
         hook_data = json.loads(raw_input)
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse hook input: {e}")
-        sys.exit(0)  # Fail open on parse error
+        sys.exit(0 if fail_open else 1)
 
     tool_name = hook_data.get("tool_name", "")
     tool_result = hook_data.get("tool_result", {})
 
-    # Only process watched tools
-    if tool_name not in WATCHED_TOOLS:
+    # Only process watched tools (read from config, fall back to defaults)
+    watched_tools = set(config.get("hooks", {}).get("watched_tools", ["WebFetch", "web_fetch"]))
+    if tool_name not in watched_tools:
         sys.exit(0)
 
     # Extract content string from tool result
@@ -98,8 +94,8 @@ def process_hook_input(raw_input: str, config: dict, logger: logging.Logger) -> 
         stage2 = Stage2LLMGuard(config.get("stage2", {}))
         llm_result = stage2.classify(content, context={"url": source_url})
     except Exception as e:
-        logger.error(f"Stage 2 LLM error: {e} — failing open")
-        sys.exit(0)  # Fail open if LLM unavailable
+        logger.error(f"Stage 2 LLM error: {e} — fail_open={fail_open}")
+        sys.exit(0 if fail_open else 1)
 
     if llm_result.is_injection:
         logger.warning(
@@ -126,7 +122,7 @@ def extract_content(tool_result: dict | str) -> str:
             content = tool_result["content"]
             if isinstance(content, list):
                 return " ".join(
-                    block.get("text", "") for block in content
+                    block.get("text") or "" for block in content
                     if isinstance(block, dict) and block.get("type") == "text"
                 )
             return str(content)
@@ -136,14 +132,26 @@ def extract_content(tool_result: dict | str) -> str:
 
 
 def main():
-    config = load_config()
-    logger = setup_logger(config.get("logging", {}))
+    try:
+        config = load_config()
+        logger = setup_logger(config.get("logging", {}))
 
-    raw_input = sys.stdin.read()
-    if not raw_input.strip():
-        sys.exit(0)
+        raw_input = sys.stdin.read()
+        if not raw_input.strip():
+            sys.exit(0)
 
-    process_hook_input(raw_input, config, logger)
+        process_hook_input(raw_input, config, logger)
+    except SystemExit:
+        raise
+    except Exception:
+        # Top-level safety net — respect fail_open config
+        try:
+            fail_open = config.get("hooks", {}).get("fail_open", True)  # type: ignore[possibly-undefined]
+        except Exception:
+            fail_open = True
+        import traceback
+        print(traceback.format_exc(), file=sys.stderr)
+        sys.exit(0 if fail_open else 1)
 
 
 if __name__ == "__main__":

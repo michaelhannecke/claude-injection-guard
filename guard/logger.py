@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-def setup_logger(config: dict = None) -> logging.Logger:
+def setup_logger(config: dict | None = None) -> logging.Logger:
     config = config or {}
     level_str = config.get("level", "INFO").upper()
     level = getattr(logging, level_str, logging.INFO)

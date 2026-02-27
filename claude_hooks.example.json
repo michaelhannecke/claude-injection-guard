@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /path/to/claude-injection-guard/hooks/post_tool_use.py"
+            "command": "python3 <path-to>/claude-injection-guard/hooks/post_tool_use.py"
           }
         ]
       }

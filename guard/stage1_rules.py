@@ -8,16 +8,18 @@ Two output states:
   - DEFINITIVE_BLOCK  → block immediately, no LLM needed
 """
 
+import logging
 import re
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
+
+log = logging.getLogger("injection-guard")
 
 
 @dataclass
 class RuleResult:
     is_safe: bool = True
     is_definitive_block: bool = False
-    matched_pattern: Optional[str] = None
+    matched_pattern: str | None = None
     reason: str = ""
     score: float = 0.0  # 0.0 = clean, 1.0 = certain injection
 
@@ -32,8 +34,8 @@ DEFINITIVE_PATTERNS: list[tuple[str, str]] = [
     (r"(?i)disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|directives?)",
      "Instruction disregard attempt"),
 
-    # Role/identity hijacking
-    (r"(?i)(you\s+are\s+now|act\s+as|pretend\s+to\s+be|your\s+new\s+(role|persona|identity)\s+is)",
+    # Role/identity hijacking (high confidence variants only)
+    (r"(?i)(pretend\s+to\s+be|your\s+new\s+(role|persona|identity)\s+is)",
      "Identity/role hijacking"),
     (r"(?i)(system\s*prompt|system\s*message|new\s+instructions?):\s*['\"]?\s*(you|your|ignore)",
      "Fake system prompt injection"),
@@ -45,7 +47,7 @@ DEFINITIVE_PATTERNS: list[tuple[str, str]] = [
      "Explicit jailbreak activation"),
 
     # Data exfiltration via instruction
-    (r"(?i)(send|transmit|exfiltrate|leak|forward)\s+.{0,40}(api\s*key|secret|password|token|credential)",
+    (r"(?i)\b(send|transmit|exfiltrate|leak|forward)\b\s+.{0,40}\b(api\s*key|secret|password|token|credential)s?\b\s+.{0,20}\b(to|http)",
      "Credential exfiltration instruction"),
     (r"(?i)(http[s]?://[^\s]+)\s*\+\s*(document\.|window\.|localStorage)",
      "DOM data exfiltration pattern"),
@@ -59,6 +61,12 @@ DEFINITIVE_PATTERNS: list[tuple[str, str]] = [
 
 # Medium-confidence patterns → suspicious, escalate to Stage 2
 SUSPICIOUS_PATTERNS: list[tuple[str, str, float]] = [
+    # Role hijacking (moved from definitive — too many false positives on web content)
+    (r"(?i)you\s+are\s+now\s+(a\s+)?(hacker|DAN|evil|unfiltered|unrestricted|an?\s+AI|my\s+new|jailbr)",
+     "Role hijacking (you are now)", 0.7),
+    (r"(?i)act\s+as\s+(a\s+)?(hacker|DAN|evil|unfiltered|unrestricted|an?\s+AI|malicious|my\s+new)",
+     "Role hijacking (act as)", 0.7),
+
     # Indirect overrides
     (r"(?i)forget\s+(everything|all|what)\s+(you('ve| have| were?)|was|were)\s+(told|said|instructed|trained)",
      "Soft instruction reset", 0.6),
@@ -85,7 +93,7 @@ SUSPICIOUS_PATTERNS: list[tuple[str, str, float]] = [
 
     # Resource exhaustion / DoS patterns
     (r"(?i)repeat\s+(the\s+)?(following|this|above).{0,20}(forever|indefinitely|\d{3,}\s*times)",
-     "Potential DoS loop instruction", 0.5),
+     "Potential DoS loop instruction", 0.6),
 ]
 
 # Scoring thresholds
@@ -94,7 +102,7 @@ DEFINITIVE_THRESHOLD = 1.0    # block immediately
 
 
 class Stage1RuleEngine:
-    def __init__(self, config: dict = None):
+    def __init__(self, config: dict | None = None):
         self.config = config or {}
         self._compiled_definitive = [
             (re.compile(pattern), reason)
@@ -118,8 +126,8 @@ class Stage1RuleEngine:
                     float(entry.get("score", 0.7)),
                     entry.get("definitive", False)
                 ))
-            except re.error:
-                pass  # skip invalid patterns
+            except re.error as e:
+                log.warning("Skipping invalid custom pattern %r: %s", entry.get("pattern"), e)
         return compiled
 
     def scan(self, content: str) -> RuleResult:

@@ -7,14 +7,14 @@ name = "claude-injection-guard"
 version = "0.1.0"
 description = "Prompt injection guard for Claude Code agents — hooks-based, two-stage detection with local LLM support"
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
 keywords = ["claude", "prompt-injection", "ai-security", "llm-security", "claude-code"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Topic :: Security",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
@@ -25,11 +25,14 @@ dependencies = [
 
 [project.optional-dependencies]
 mlx = ["mlx-lm>=0.19"]
-dev = ["pytest>=8.0", "pytest-cov", "ruff", "mypy"]
+dev = ["pytest>=8.0", "pytest-cov", "ruff", "mypy", "types-PyYAML"]
 
 [project.urls]
-Repository = "https://github.com/YOUR_USERNAME/claude-injection-guard"
-Issues = "https://github.com/YOUR_USERNAME/claude-injection-guard/issues"
+Repository = "https://github.com/michaelhannecke/claude-injection-guard"
+Issues = "https://github.com/michaelhannecke/claude-injection-guard/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["guard"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
