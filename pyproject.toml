@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Prompt injection guard for Claude Code agents — hooks-based, two-stage detection with local LLM support"
 readme = "README.md"
 license = { text = "Apache-2.0" }
+authors = [{ name = "Michael Hannecke" }]
 requires-python = ">=3.11"
 keywords = ["claude", "prompt-injection", "ai-security", "llm-security", "claude-code"]
 classifiers = [
