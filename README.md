@@ -37,6 +37,7 @@ When Claude Code (or a sub-agent) fetches web content, that content enters the a
 
 - [Features](#features)
 - [Requirements](#requirements)
+- [Architecture](#architecture)
 - [Installation](#installation)
 - [Claude Code Hook Setup](#claude-code-hook-setup)
 - [Configuration](#configuration)
@@ -95,6 +96,26 @@ ollama pull phi3.5:mini
 # 4. Configure
 cp config.example.yml ~/.claude/injection-guard/config.yml
 # Edit as needed (defaults work out of the box with Ollama)
+```
+
+---
+
+## Architecture
+
+```
+hooks/post_tool_use.py          ← Claude Code hook entry point (thin wrapper)
+guard/
+  post_tool_use.py              ← Main hook logic & orchestration
+  stage1_rules.py               ← Rule engine: 10 definitive + 15 suspicious patterns
+  stage2_llm.py                 ← LLM classifier: 4 backends, structured output
+  config.py                     ← YAML config loader, deep_merge, defaults
+  logger.py                     ← Structured stderr-only logger
+tests/
+  test_stage1.py                ← 30 tests
+  test_stage2_llm.py            ← 10 tests
+  test_post_tool_use.py         ← 17 tests
+  test_config.py                ← 6 tests
+  test_logger.py                ← 4 tests
 ```
 
 ---
@@ -164,25 +185,33 @@ The hook still runs on the host -- only the LLM inference runs in Docker.
 ## What Gets Detected
 
 <details>
-<summary><strong>Stage 1 -- Definitive blocks</strong> (immediate, no LLM needed)</summary>
+<summary><strong>Stage 1 -- Definitive blocks</strong> (immediate, no LLM needed) — 10 patterns</summary>
 
-- Direct instruction overrides (`ignore all previous instructions`)
+- Direct instruction overrides (`ignore all previous instructions`, `disregard your instructions`)
 - Identity hijacking (`pretend to be`, `your new role is`)
-- Known jailbreak personas (DAN, STAN, etc.)
-- Credential exfiltration instructions
-- Hidden instruction markers (`<!-- instruction: -->`, `<instruction>`)
+- Fake system prompt injection (`system prompt:`, `new system message`)
+- Known jailbreak personas (DAN, STAN, DUDE, AIM, KEVIN, BasedGPT)
+- Jailbreak activation language (`jailbreak mode`, `developer mode enabled`)
+- Credential exfiltration (`send your API key to`, `exfiltrate`)
+- DOM data exfiltration (`localStorage`, `document.cookie` to external targets)
+- Hidden HTML comment instructions (`<!-- instruction: -->`)
+- XML/HTML instruction tags (`<instruction>`, `<system>`, `<prompt>`)
 
 </details>
 
 <details>
-<summary><strong>Stage 1 -- Suspicious</strong> (escalated to Stage 2)</summary>
+<summary><strong>Stage 1 -- Suspicious</strong> (escalated to Stage 2) — 15 patterns, scored 0.6–0.8</summary>
 
 - Role hijacking phrases (`you are now a hacker`, `act as DAN`)
 - Soft instruction resets (`forget everything you were told`)
 - Safety bypass language (`override your restrictions`)
-- LLM prompt delimiter injection (`[INST]`, `<|im_start|>`)
-- Zero-width character obfuscation
-- User deception instructions
+- LLM prompt delimiter injection (`[INST]`, `<|im_start|>`, `<|system|>`)
+- Conversation role tags (`### Human:`, `### Assistant:`)
+- Zero-width character obfuscation (U+200B, U+200C, U+200D, U+FEFF)
+- Encoded instruction delivery (base64/hex encoded commands)
+- User deception instructions (`tell the user`, `respond with`)
+- Instruction replacement framing (`instead of`, `replace your instructions`)
+- Resource exhaustion / DoS patterns (infinite loops, repeated operations)
 
 </details>
 
@@ -226,10 +255,20 @@ hooks:
 
 ## Running Tests
 
+67 tests across 5 test files covering rules, LLM classification, hook orchestration, config, and logging.
+
 ```bash
 pip install -e ".[dev]"
 pytest
 ```
+
+| Test file | Tests | Coverage |
+|---|---|---|
+| `test_stage1.py` | 30 | Definitive blocks, suspicious escalation, safe passthrough, custom patterns, edge cases |
+| `test_stage2_llm.py` | 10 | Response parsing, backend calls, delimiter hardening |
+| `test_post_tool_use.py` | 17 | Hook orchestration, error handling, exit codes |
+| `test_config.py` | 6 | Config loading, merging, precedence |
+| `test_logger.py` | 4 | Logger setup, levels, file handling |
 
 **Linting and type checking:**
 
@@ -252,6 +291,7 @@ mypy guard/ hooks/
 
 ## Security Considerations
 
+- 25 built-in patterns (10 definitive, 15 suspicious) plus user-configurable custom patterns
 - Stage 1 patterns are conservative by design -- low false positive rate is prioritized
 - Stage 2 LLM output is strictly parsed; the guard model cannot itself be injected
 - The hook always logs to stderr, separate from Claude's stdout context
